@@ -18,7 +18,9 @@ export default function Profile() {
   const [books, setBooks] = useState<Book[]>([]);
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isEditingBio, setIsEditingBio] = useState(false);
   const [editedQuote, setEditedQuote] = useState("");
+  const [editedBio, setEditedBio] = useState("");
 
   useEffect(() => {
     const currentUser = storage.getUser();
@@ -26,6 +28,7 @@ export default function Profile() {
       const newUser: User = {
         id: '1',
         name: 'Reader',
+        bio: 'Add your bio...',
         favQuote: 'Add your favorite quote...',
       };
       storage.setUser(newUser);
@@ -48,6 +51,16 @@ export default function Profile() {
     }
   };
 
+  const handleBioEdit = () => {
+    if (user) {
+      const updated = { ...user, bio: editedBio };
+      storage.setUser(updated);
+      setUser(updated);
+      setIsEditingBio(false);
+      toast.success("Bio updated");
+    }
+  };
+
   const currentlyReading = books.filter(b => b.status === 'reading');
   const alreadyRead = books.filter(b => b.status === 'read');
 
@@ -57,7 +70,7 @@ export default function Profile() {
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Profile Header */}
-        <Card className="p-8 mb-8 bg-card border-border">
+        <div className="mb-12">
           <div className="flex items-start gap-6">
             <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
               {user.profilePic ? (
@@ -67,7 +80,37 @@ export default function Profile() {
               )}
             </div>
             <div className="flex-1">
-              <h1 className="font-serif text-4xl font-bold mb-2">{user.name}</h1>
+              <h1 className="font-serif text-4xl font-bold mb-3">{user.name}</h1>
+              <div className="flex items-center gap-2 mb-4">
+                <p className="text-foreground">{user.bio}</p>
+                <Dialog open={isEditingBio} onOpenChange={setIsEditingBio}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setEditedBio(user.bio || '')}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle className="font-serif">Edit Bio</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <Textarea
+                        value={editedBio}
+                        onChange={(e) => setEditedBio(e.target.value)}
+                        placeholder="Tell us about yourself..."
+                        className="min-h-24"
+                      />
+                      <Button onClick={handleBioEdit} className="w-full">
+                        Save Bio
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
               <div className="flex items-center gap-2">
                 <p className="text-muted-foreground italic">{user.favQuote}</p>
                 <Dialog open={isEditingProfile} onOpenChange={setIsEditingProfile}>
@@ -100,7 +143,7 @@ export default function Profile() {
               </div>
             </div>
           </div>
-        </Card>
+        </div>
 
         {/* Currently Reading */}
         <section className="mb-12">
