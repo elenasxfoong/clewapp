@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Edit2, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
+
 export default function Profile() {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
