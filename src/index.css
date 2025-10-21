@@ -4,10 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
+/* Design tokens */
 @layer base {
   :root {
     --background: 35 20% 97%;
@@ -78,7 +75,7 @@ All colors MUST be HSL.
     --border: 25 10% 20%;
     --input: 25 10% 20%;
     --ring: 355 60% 55%;
-    
+
     --sidebar-background: 25 15% 10%;
     --sidebar-foreground: 35 20% 90%;
     --sidebar-primary: 355 60% 55%;
@@ -88,9 +85,8 @@ All colors MUST be HSL.
     --sidebar-border: 25 10% 20%;
     --sidebar-ring: 355 60% 55%;
   }
-}
 
-@layer base {
+  /* Global element styles using Tailwind utilities (v3) */
   * {
     @apply border-border;
   }
@@ -99,8 +95,10 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
     font-family: 'Inter', sans-serif;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Crimson Text', serif;
   }
 }
+
+
