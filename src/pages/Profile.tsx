@@ -1,15 +1,15 @@
+//profile/Me page
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { storage, User, Book, Shelf } from "@/lib/storage";
 import { BookCard } from "@/components/BookCard";
 import { ShelfCard } from "@/components/ShelfCard";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Plus, Edit2, User as UserIcon } from "lucide-react";
+import { Plus, Edit2, User as UserIcon, Search, Settings } from "lucide-react";
 import { toast } from "sonner";
 
 
@@ -22,6 +22,7 @@ export default function Profile() {
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [editedQuote, setEditedQuote] = useState("");
   const [editedBio, setEditedBio] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const currentUser = storage.getUser();
@@ -69,6 +70,73 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-background">
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            <div className="flex items-center gap-4 lg:w-1/3"> 
+              <button
+                className="text-3xl font-serif font-bold tracking-wide" 
+                onClick={() => navigate('/')} 
+              >
+                Clew
+              </button>
+              <div className="relative flex-1 hidden sm:block">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="rounded-full pl-10 pr-4"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-center gap-2 lg:w-1/3">
+              <Button variant="ghost" className="text-base font-medium" onClick={() => navigate('/home')}>
+                Home
+              </Button>
+              <Button variant="ghost" className="text-base font-medium" onClick={() => navigate('/trending')}>
+                Trending
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-14 w-24 rounded-xl text-sm font-semibold"
+                onClick={() => navigate('/log')}
+              >
+                Log +
+              </Button>
+            </div>
+            <div className="flex items-center justify-end gap-4 lg:w-1/3">
+              <button
+                className="flex items-center gap-3 rounded-full border px-3 py-1.5 transition hover:bg-accent"
+                onClick={() => navigate('/profile')}
+              >
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                  {user.profilePic ? (
+                    <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <UserIcon className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </div>
+                <span className="font-medium">{user.name}</span>
+              </button>
+              <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+                <Settings className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 sm:hidden">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search..."
+                className="rounded-full pl-10 pr-4"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Profile Header */}
         <div className="mb-12">
