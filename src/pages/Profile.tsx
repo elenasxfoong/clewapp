@@ -6,11 +6,14 @@ import { storage, User, Book, Shelf } from "@/lib/storage";
 import { BookCard } from "@/components/BookCard";
 import { ShelfCard } from "@/components/ShelfCard";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Edit2, User as UserIcon, Search, Settings } from "lucide-react";
 import { toast } from "sonner";
+
+type ActivityTab = 'logs' | 'reviews' | 'comments';
 
 
 export default function Profile() {
@@ -23,6 +26,7 @@ export default function Profile() {
   const [editedQuote, setEditedQuote] = useState("");
   const [editedBio, setEditedBio] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeActivityTab, setActiveActivityTab] = useState<ActivityTab>('logs');
 
   useEffect(() => {
     const currentUser = storage.getUser();
@@ -65,6 +69,19 @@ export default function Profile() {
 
   const currentlyReading = books.filter(b => b.status === 'reading');
   const alreadyRead = books.filter(b => b.status === 'read');
+  const wishlist = books.filter(b => b.status === 'wishlist');
+
+  const activityTabs: { label: string; value: ActivityTab }[] = [
+    { label: 'Logs', value: 'logs' },
+    { label: 'Reviews', value: 'reviews' },
+    { label: 'Comments', value: 'comments' },
+  ];
+
+  const activityMessages: Record<ActivityTab, string> = {
+    logs: "You haven't logged any activity yet.",
+    reviews: "Reviews you write will appear here.",
+    comments: "Comments you've made will show up here.",
+  };
 
   if (!user) return null;
 
@@ -99,7 +116,7 @@ export default function Profile() {
               </Button>
               <Button
                 variant="secondary"
-                className="h-14 w-24 rounded-xl text-sm font-semibold"
+                className="h-12 w-24 rounded-xl text-sm font-semibold flex items-center justify-center gap-1"
                 onClick={() => navigate('/log')}
               >
                 Log +
@@ -217,7 +234,10 @@ export default function Profile() {
         {/* Currently Reading */}
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-serif text-3xl font-semibold">Currently Reading</h2>
+            <div className="flex items-baseline gap-2">
+              <h2 className="font-serif text-3xl font-semibold">Currently Reading</h2>
+              <span className="text-xs font-semibold text-primary">({currentlyReading.length})</span>
+            </div>
             <Button onClick={() => navigate('/add-book?status=reading')}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
@@ -237,7 +257,10 @@ export default function Profile() {
         {/* Already Read */}
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-serif text-3xl font-semibold">Already Read</h2>
+            <div className="flex items-baseline gap-2">
+              <h2 className="font-serif text-3xl font-semibold">Already Read</h2>
+              <span className="text-xs font-semibold text-primary">({alreadyRead.length})</span>
+            </div>
             <Button onClick={() => navigate('/add-book?status=read')}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
@@ -255,9 +278,12 @@ export default function Profile() {
         </section>
 
         {/* Shelves */}
-        <section>
+        <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-serif text-3xl font-semibold">Shelves</h2>
+            <div className="flex items-baseline gap-2">
+              <h2 className="font-serif text-3xl font-semibold">Shelves</h2>
+              <span className="text-xs font-semibold text-primary">({shelves.length})</span>
+            </div>
             <Button onClick={() => navigate('/create-shelf')}>
               <Plus className="w-4 h-4 mr-2" />
               Create Shelf
@@ -276,6 +302,55 @@ export default function Profile() {
               );
             })}
           </div>
+        </section>
+
+        <section className="mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-baseline gap-2">
+              <h2 className="font-serif text-3xl font-semibold">Wishlist</h2>
+              <span className="text-xs font-semibold text-primary">({wishlist.length})</span>
+            </div>
+            <Button onClick={() => navigate('/add-book?status=wishlist')}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Book
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {wishlist.map(book => (
+              <BookCard 
+                key={book.id} 
+                book={book} 
+                onClick={() => navigate(`/book/${book.id}`)}
+              />
+            ))}
+          </div>
+          {wishlist.length === 0 && (
+            <p className="text-sm text-muted-foreground mt-4">No books in your wishlist yet.</p>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-6">
+            <h2 className="font-serif text-3xl font-semibold">Activity</h2>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {activityTabs.map(tab => (
+                <Button
+                  key={tab.value}
+                  variant={activeActivityTab === tab.value ? "default" : "ghost"}
+                  size="sm"
+                  className={activeActivityTab === tab.value ? "shadow" : "text-muted-foreground"}
+                  onClick={() => setActiveActivityTab(tab.value)}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <Card className="p-6">
+            <p className="text-muted-foreground">
+              {activityMessages[activeActivityTab]}
+            </p>
+          </Card>
         </section>
       </div>
     </div>
