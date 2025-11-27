@@ -7,7 +7,7 @@
 /* Design tokens */
 @layer base {
   :root {
-    --background: 35 20% 97%;
+    --background: 30 40% 96%;
     --foreground: 25 15% 15%;
 
     --card: 35 25% 99%;
@@ -100,5 +100,4 @@
     font-family: 'Crimson Text', serif;
   }
 }
-
 

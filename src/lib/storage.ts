@@ -11,6 +11,20 @@ export interface Book {
   userId: string;
 }
 
+export interface Draft {
+  id: string;
+  title: string;
+  author: string;
+  coverImage?: string;
+  rating?: number;
+  dateRead?: string;
+  review?: string;
+  status?: Book['status'];
+  userId: string;
+  isCurrentlyReading?: boolean;
+  lastEdited: string;
+}
+
 export interface Shelf {
   id: string;
   name: string;
@@ -26,6 +40,9 @@ export interface User {
   profilePic?: string;
   bio?: string;
   favQuote?: string;
+  logsCount?: number;
+  followingCount?: number;
+  followersCount?: number;
 }
 
 export interface Comment {
@@ -42,6 +59,7 @@ const STORAGE_KEYS = {
   BOOKS: 'clew_books',
   SHELVES: 'clew_shelves',
   COMMENTS: 'clew_comments',
+  DRAFTS: 'clew_drafts',
 };
 
 export const storage = {
@@ -125,5 +143,34 @@ export const storage = {
     const comments = storage.getComments();
     comments.push(comment);
     storage.setComments(comments);
+  },
+
+  getDrafts: (): Draft[] => {
+    const data = localStorage.getItem(STORAGE_KEYS.DRAFTS);
+    return data ? JSON.parse(data) : [];
+  },
+
+  setDrafts: (drafts: Draft[]) => {
+    localStorage.setItem(STORAGE_KEYS.DRAFTS, JSON.stringify(drafts));
+  },
+
+  addDraft: (draft: Draft) => {
+    const drafts = storage.getDrafts();
+    drafts.push(draft);
+    storage.setDrafts(drafts);
+  },
+
+  updateDraft: (draftId: string, updates: Partial<Draft>) => {
+    const drafts = storage.getDrafts();
+    const index = drafts.findIndex((d) => d.id === draftId);
+    if (index !== -1) {
+      drafts[index] = { ...drafts[index], ...updates };
+      storage.setDrafts(drafts);
+    }
+  },
+
+  deleteDraft: (draftId: string) => {
+    const drafts = storage.getDrafts().filter((draft) => draft.id !== draftId);
+    storage.setDrafts(drafts);
   },
 };

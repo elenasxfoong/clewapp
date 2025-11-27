@@ -5,9 +5,11 @@ import { Star } from "lucide-react";
 interface BookCardProps {
   book: Book;
   onClick?: () => void;
+  footerNote?: string;
+  footerNoteClassName?: string;
 }
 
-export const BookCard = ({ book, onClick }: BookCardProps) => {
+export const BookCard = ({ book, onClick, footerNote, footerNoteClassName }: BookCardProps) => {
   return (
     <Card 
       className="group overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 bg-card border-border"
@@ -40,6 +42,11 @@ export const BookCard = ({ book, onClick }: BookCardProps) => {
               />
             ))}
           </div>
+        )}
+        {footerNote && (
+          <p className={`text-[10px] mt-2 ${footerNoteClassName ?? 'text-muted-foreground'}`}>
+            {footerNote}
+          </p>
         )}
       </div>
     </Card>

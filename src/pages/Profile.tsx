@@ -1,8 +1,9 @@
 //profile/Me page
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { storage, User, Book, Shelf } from "@/lib/storage";
+import { generalBookDatabase } from "@/lib/generalBooks";
 import { BookCard } from "@/components/BookCard";
 import { ShelfCard } from "@/components/ShelfCard";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,9 @@ export default function Profile() {
   const [editedBio, setEditedBio] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeActivityTab, setActiveActivityTab] = useState<ActivityTab>('logs');
+  const [isAddBookDialogOpen, setIsAddBookDialogOpen] = useState(false);
+  const [bookSearchQuery, setBookSearchQuery] = useState("");
+  const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const currentUser = storage.getUser();
@@ -36,6 +40,9 @@ export default function Profile() {
         name: 'Reader',
         bio: 'Add your bio...',
         favQuote: 'Add your favorite quote...',
+        logsCount: 0,
+        followingCount: 0,
+        followersCount: 0,
       };
       storage.setUser(newUser);
       setUser(newUser);
@@ -70,6 +77,14 @@ export default function Profile() {
   const currentlyReading = books.filter(b => b.status === 'reading');
   const alreadyRead = books.filter(b => b.status === 'read');
   const wishlist = books.filter(b => b.status === 'wishlist');
+  const logsCount = user?.logsCount ?? books.length;
+  const followingCount = user?.followingCount ?? 0;
+  const followersCount = user?.followersCount ?? 0;
+  const profileStats = [
+    { label: 'Logs', value: logsCount },
+    { label: 'Following', value: followingCount },
+    { label: 'Followers', value: followersCount },
+  ];
 
   const activityTabs: { label: string; value: ActivityTab }[] = [
     { label: 'Logs', value: 'logs' },
@@ -81,6 +96,60 @@ export default function Profile() {
     logs: "You haven't logged any activity yet.",
     reviews: "Reviews you write will appear here.",
     comments: "Comments you've made will show up here.",
+  };
+
+  const filteredGeneralBooks = useMemo(() => {
+    const normalizedQuery = bookSearchQuery.trim().toLowerCase();
+    return generalBookDatabase
+      .map((book, index) => {
+        const title = book.title.toLowerCase();
+        const author = book.author.toLowerCase();
+        let score = 0;
+        if (normalizedQuery) {
+          if (title.startsWith(normalizedQuery)) score += 3;
+          else if (title.includes(normalizedQuery)) score += 2;
+          if (author.startsWith(normalizedQuery)) score += 2;
+          else if (author.includes(normalizedQuery)) score += 1;
+        }
+        return { book, score, index };
+      })
+      .filter(item => (normalizedQuery ? item.score > 0 : true))
+      .sort((a, b) => {
+        if (normalizedQuery && a.score !== b.score) {
+          return b.score - a.score;
+        }
+        return a.index - b.index;
+      })
+      .slice(0, 5)
+      .map(item => item.book);
+  }, [bookSearchQuery]);
+
+  const handleOpenAddBookDialog = () => {
+    setBookSearchQuery("");
+    setIsAddBookDialogOpen(true);
+  };
+
+  const handleProfileImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const profilePic = reader.result as string;
+      const updatedUser = { ...user, profilePic };
+      storage.setUser(updatedUser);
+      setUser(updatedUser);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerProfileImageUpload = () => {
+    profileImageInputRef.current?.click();
+  };
+
+  const handleSelectBook = (bookId: string) => {
+    setIsAddBookDialogOpen(false);
+    setBookSearchQuery("");
+    navigate(`/add-book/${bookId}`);
   };
 
   if (!user) return null;
@@ -113,6 +182,9 @@ export default function Profile() {
               </Button>
               <Button variant="ghost" className="text-base font-medium" onClick={() => navigate('/trending')}>
                 Trending
+              </Button>
+              <Button variant="ghost" className="text-base font-medium" onClick={() => navigate('/drafts')}>
+                Drafts
               </Button>
               <Button
                 variant="secondary"
@@ -157,76 +229,103 @@ export default function Profile() {
       <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Profile Header */}
         <div className="mb-12">
-          <div className="flex items-start gap-6">
-            <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-              {user.profilePic ? (
-                <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
-              ) : (
-                <UserIcon className="w-12 h-12 text-muted-foreground" />
-              )}
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-6 flex-1">
+              <div className="relative">
+                <button
+                  type="button"
+                  className="group w-24 h-24 rounded-full overflow-hidden bg-muted flex items-center justify-center"
+                  onClick={triggerProfileImageUpload}
+                >
+                  {user.profilePic ? (
+                    <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <UserIcon className="w-12 h-12 text-muted-foreground" />
+                  )}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/60 text-white text-xs font-semibold tracking-wide opacity-0 transition group-hover:opacity-100">
+                    <span>Change</span>
+                    <span>Photo</span>
+                  </div>
+                </button>
+                <input
+                  ref={profileImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleProfileImageChange}
+                />
+              </div>
+              <div className="flex-1">
+                <h1 className="font-serif text-4xl font-bold mb-3">{user.name}</h1>
+                <div className="flex items-center gap-2 mb-4">
+                  <p className="text-foreground">{user.bio}</p>
+                  <Dialog open={isEditingBio} onOpenChange={setIsEditingBio}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setEditedBio(user.bio || '')}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle className="font-serif">Edit Bio</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <Textarea
+                          value={editedBio}
+                          onChange={(e) => setEditedBio(e.target.value)}
+                          placeholder="Tell us about yourself..."
+                          className="min-h-24"
+                        />
+                        <Button onClick={handleBioEdit} className="w-full">
+                          Save Bio
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="text-muted-foreground italic">{user.favQuote}</p>
+                  <Dialog open={isEditingProfile} onOpenChange={setIsEditingProfile}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setEditedQuote(user.favQuote || '')}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle className="font-serif">Edit Favorite Quote</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <Textarea
+                          value={editedQuote}
+                          onChange={(e) => setEditedQuote(e.target.value)}
+                          placeholder="Your favorite book quote..."
+                          className="min-h-24"
+                        />
+                        <Button onClick={handleQuoteEdit} className="w-full">
+                          Save Quote
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
             </div>
-            <div className="flex-1">
-              <h1 className="font-serif text-4xl font-bold mb-3">{user.name}</h1>
-              <div className="flex items-center gap-2 mb-4">
-                <p className="text-foreground">{user.bio}</p>
-                <Dialog open={isEditingBio} onOpenChange={setIsEditingBio}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setEditedBio(user.bio || '')}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle className="font-serif">Edit Bio</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <Textarea
-                        value={editedBio}
-                        onChange={(e) => setEditedBio(e.target.value)}
-                        placeholder="Tell us about yourself..."
-                        className="min-h-24"
-                      />
-                      <Button onClick={handleBioEdit} className="w-full">
-                        Save Bio
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-muted-foreground italic">{user.favQuote}</p>
-                <Dialog open={isEditingProfile} onOpenChange={setIsEditingProfile}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setEditedQuote(user.favQuote || '')}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle className="font-serif">Edit Favorite Quote</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <Textarea
-                        value={editedQuote}
-                        onChange={(e) => setEditedQuote(e.target.value)}
-                        placeholder="Your favorite book quote..."
-                        className="min-h-24"
-                      />
-                      <Button onClick={handleQuoteEdit} className="w-full">
-                        Save Quote
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
+            <div className="flex items-center gap-8 lg:justify-end">
+              {profileStats.map(stat => (
+                <div key={stat.label} className="text-center">
+                  <p className="text-3xl font-serif font-semibold">{stat.value}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -238,7 +337,7 @@ export default function Profile() {
               <h2 className="font-serif text-3xl font-semibold">Currently Reading</h2>
               <span className="text-xs font-semibold text-primary">({currentlyReading.length})</span>
             </div>
-            <Button onClick={() => navigate('/add-book?status=reading')}>
+            <Button onClick={handleOpenAddBookDialog}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
             </Button>
@@ -261,7 +360,7 @@ export default function Profile() {
               <h2 className="font-serif text-3xl font-semibold">Already Read</h2>
               <span className="text-xs font-semibold text-primary">({alreadyRead.length})</span>
             </div>
-            <Button onClick={() => navigate('/add-book?status=read')}>
+            <Button onClick={handleOpenAddBookDialog}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
             </Button>
@@ -310,7 +409,7 @@ export default function Profile() {
               <h2 className="font-serif text-3xl font-semibold">Wishlist</h2>
               <span className="text-xs font-semibold text-primary">({wishlist.length})</span>
             </div>
-            <Button onClick={() => navigate('/add-book?status=wishlist')}>
+            <Button onClick={handleOpenAddBookDialog}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
             </Button>
@@ -353,6 +452,51 @@ export default function Profile() {
           </Card>
         </section>
       </div>
+
+      <Dialog
+        open={isAddBookDialogOpen}
+        onOpenChange={(open) => {
+          setIsAddBookDialogOpen(open);
+          if (!open) {
+            setBookSearchQuery("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl">Add a Book</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={bookSearchQuery}
+                onChange={(e) => setBookSearchQuery(e.target.value)}
+                placeholder="Search the general catalog..."
+                className="pl-10"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-3">
+              {filteredGeneralBooks.map((book) => (
+                <div
+                  key={book.id}
+                  className="cursor-pointer rounded-lg border p-3 transition hover:bg-muted"
+                  onClick={() => handleSelectBook(book.id)}
+                >
+                  <p className="font-semibold">{book.title}</p>
+                  <p className="text-sm text-muted-foreground">{book.author}</p>
+                </div>
+              ))}
+              {filteredGeneralBooks.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No books match your search yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
