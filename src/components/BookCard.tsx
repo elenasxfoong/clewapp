@@ -1,21 +1,34 @@
 import { Book } from "@/lib/storage";
 import { Card } from "@/components/ui/card";
-import { Star } from "lucide-react";
+import { MoreHorizontal, Star } from "lucide-react";
 
 interface BookCardProps {
   book: Book;
   onClick?: () => void;
+  onEdit?: () => void;
   footerNote?: string;
   footerNoteClassName?: string;
 }
 
-export const BookCard = ({ book, onClick, footerNote, footerNoteClassName }: BookCardProps) => {
+export const BookCard = ({ book, onClick, onEdit, footerNote, footerNoteClassName }: BookCardProps) => {
   return (
     <Card 
       className="group overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 bg-card border-border"
       onClick={onClick}
     >
       <div className="aspect-[2/3] relative overflow-hidden bg-muted">
+        {onEdit && (
+          <button
+            type="button"
+            className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit();
+            }}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        )}
         {book.coverImage ? (
           <img 
             src={book.coverImage} 

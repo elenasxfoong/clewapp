@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { generalBookDatabase } from "@/lib/generalBooks";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,11 @@ const generateBookId = () => {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const AddBookDetails = () => {
+type AddBookDetailsProps = {
+  mode?: "create" | "edit";
+};
+
+const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
   const { bookId } = useParams<{ bookId: string }>();
   const navigate = useNavigate();
   const currentUser = useMemo(() => storage.getUser(), []);
@@ -32,12 +36,38 @@ const AddBookDetails = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
-  const book = useMemo(
+  const savedBook = useMemo(() => {
+    if (!bookId) return null;
+    const books = storage.getBooks();
+    return books.find((entry) => entry.id === bookId) ?? null;
+  }, [bookId]);
+
+  const libraryBook = useMemo(
     () => generalBookDatabase.find((entry) => entry.id === bookId),
     [bookId]
   );
+  const isEditing = mode === "edit";
+  const book = isEditing ? savedBook : libraryBook;
 
   const displayedRating = hoveredRating ?? rating;
+
+  useEffect(() => {
+    if (isEditing && savedBook) {
+      setImagePreview(savedBook.coverImage ?? null);
+      setImageData(savedBook.coverImage ?? null);
+      setDateRead(savedBook.dateRead ?? "");
+      setRating(savedBook.rating ?? 0);
+      setReview(savedBook.review ?? "");
+      setIsCurrentlyReading(savedBook.status === "reading");
+    } else if (!isEditing) {
+      setImagePreview(null);
+      setImageData(null);
+      setDateRead("");
+      setRating(0);
+      setReview("");
+      setIsCurrentlyReading(false);
+    }
+  }, [isEditing, savedBook, bookId]);
 
   const handleImageClick = () => {
     fileInputRef.current?.click();
@@ -90,20 +120,31 @@ const AddBookDetails = () => {
         : trimmedDate
         ? "read"
         : "reading";
-      
-      const newBook: Book = {
-        id: generateBookId(),
-        title: book.title,
-        author: book.author,
-        coverImage: imageData || "",
-        rating: rating > 0 ? rating : undefined,
-        dateRead: status === "read" ? trimmedDate : undefined,
-        review: review || undefined,
-        status,
-        userId: currentUser?.id ?? "1",
-      };
-      
-      storage.addBook(newBook);
+
+      if (isEditing && savedBook) {
+        storage.updateBook(savedBook.id, {
+          coverImage: imageData || savedBook.coverImage || "",
+          rating: rating > 0 ? rating : undefined,
+          dateRead: status === "read" ? trimmedDate : undefined,
+          review: review || undefined,
+          status,
+          userId: savedBook.userId,
+        });
+      } else {
+        const newBook: Book = {
+          id: generateBookId(),
+          title: book.title,
+          author: book.author,
+          coverImage: imageData || "",
+          rating: rating > 0 ? rating : undefined,
+          dateRead: status === "read" ? trimmedDate : undefined,
+          review: review || undefined,
+          status,
+          userId: currentUser?.id ?? "1",
+        };
+        
+        storage.addBook(newBook);
+      }
       navigate("/profile");
     } finally {
       setIsPublishing(false);
@@ -111,7 +152,7 @@ const AddBookDetails = () => {
   };
 
   const handleSaveDraft = () => {
-    if (!book || isSavingDraft) return;
+    if (!book || isSavingDraft || isEditing) return;
     setIsSavingDraft(true);
 
     try {
@@ -257,9 +298,11 @@ const AddBookDetails = () => {
               className="mt-6 min-h-[200px] w-full rounded-xl border border-border bg-transparent px-4 py-3 text-base"
             />
             <div className="flex flex-wrap justify-end gap-3">
-              <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft}>
-                {isSavingDraft ? "Saving..." : "Save Draft"}
-              </Button>
+              {!isEditing && (
+                <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft}>
+                  {isSavingDraft ? "Saving..." : "Save Draft"}
+                </Button>
+              )}
               <Button onClick={handlePublish} disabled={isPublishing}>
                 {isPublishing ? "Publishing..." : "Publish"}
               </Button>

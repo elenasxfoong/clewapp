@@ -10,6 +10,7 @@ import Trending from "./pages/Trending";
 import Log from "./pages/Log";
 import Settings from "./pages/Settings";
 import Drafts from "./pages/Drafts";
+import AddShelf from "./pages/AddShelf";
 import AddBookDetails from "./pages/AddBookDetails";
 import NotFound from "./pages/NotFound";
 
@@ -29,7 +30,10 @@ const App = () => (
           <Route path="/log" element={<Log />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/drafts" element={<Drafts />} />
+          <Route path="/create-shelf" element={<AddShelf />} />
+          <Route path="/edit-shelf/:shelfId" element={<AddShelf mode="edit" />} />
           <Route path="/add-book/:bookId" element={<AddBookDetails />} />
+          <Route path="/edit-book/:bookId" element={<AddBookDetails mode="edit" />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

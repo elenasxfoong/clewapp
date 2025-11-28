@@ -348,6 +348,7 @@ export default function Profile() {
                 key={book.id} 
                 book={book} 
                 onClick={() => navigate(`/book/${book.id}`)}
+                onEdit={() => navigate(`/edit-book/${book.id}`)}
               />
             ))}
           </div>
@@ -371,6 +372,7 @@ export default function Profile() {
                 key={book.id} 
                 book={book} 
                 onClick={() => navigate(`/book/${book.id}`)}
+                onEdit={() => navigate(`/edit-book/${book.id}`)}
               />
             ))}
           </div>
@@ -388,7 +390,7 @@ export default function Profile() {
               Create Shelf
             </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {shelves.map(shelf => {
               const shelfBooks = books.filter(b => shelf.bookIds.includes(b.id));
               return (
@@ -397,6 +399,7 @@ export default function Profile() {
                   shelf={shelf} 
                   books={shelfBooks}
                   onClick={() => navigate(`/shelf/${shelf.id}`)}
+                  onEdit={() => navigate(`/edit-shelf/${shelf.id}`)}
                 />
               );
             })}
