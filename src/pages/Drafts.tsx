@@ -5,6 +5,7 @@ import { BookCard } from "@/components/BookCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Settings, User as UserIcon } from "lucide-react";
+import { toast } from "sonner";
 
 const formatDate = (value: string) => {
   try {
@@ -42,6 +43,13 @@ const Drafts = () => {
 
     setDrafts(storage.getDrafts());
   }, []);
+
+  const handleDeleteDraft = (draftId: string) => {
+    storage.deleteDraft(draftId);
+    const updatedDrafts = storage.getDrafts();
+    setDrafts(updatedDrafts);
+    toast.success("Draft deleted");
+  };
 
   if (!user) return null;
 
@@ -130,7 +138,7 @@ const Drafts = () => {
         {drafts.length === 0 ? (
           <p className="text-muted-foreground">You haven&apos;t saved any drafts yet.</p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {drafts.map((draft) => (
               <BookCard
                 key={draft.id}
@@ -145,6 +153,8 @@ const Drafts = () => {
                   status: draft.status || "wishlist",
                   userId: draft.userId,
                 }}
+                onEdit={() => navigate(`/drafts/${draft.id}/edit`)}
+                onDelete={() => handleDeleteDraft(draft.id)}
                 footerNote={draft.lastEdited ? `Last edited ${formatDate(draft.lastEdited)}` : undefined}
                 footerNoteClassName="text-[11px] text-primary"
               />

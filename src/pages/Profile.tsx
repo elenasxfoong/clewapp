@@ -15,6 +15,7 @@ import { Plus, Edit2, User as UserIcon, Search, Settings } from "lucide-react";
 import { toast } from "sonner";
 
 type ActivityTab = 'logs' | 'reviews' | 'comments';
+type LogView = 'monthly' | 'daily';
 
 
 export default function Profile() {
@@ -30,6 +31,8 @@ export default function Profile() {
   const [activeActivityTab, setActiveActivityTab] = useState<ActivityTab>('logs');
   const [isAddBookDialogOpen, setIsAddBookDialogOpen] = useState(false);
   const [bookSearchQuery, setBookSearchQuery] = useState("");
+  const [addBookStatus, setAddBookStatus] = useState<Book["status"]>("reading");
+  const [logView, setLogView] = useState<LogView>("monthly");
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -124,7 +127,8 @@ export default function Profile() {
       .map(item => item.book);
   }, [bookSearchQuery]);
 
-  const handleOpenAddBookDialog = () => {
+  const handleOpenAddBookDialog = (status: Book["status"]) => {
+    setAddBookStatus(status);
     setBookSearchQuery("");
     setIsAddBookDialogOpen(true);
   };
@@ -149,7 +153,28 @@ export default function Profile() {
   const handleSelectBook = (bookId: string) => {
     setIsAddBookDialogOpen(false);
     setBookSearchQuery("");
-    navigate(`/add-book/${bookId}`);
+    navigate(`/add-book/${bookId}?status=${addBookStatus}`);
+  };
+
+  const handleDeleteBook = (bookId: string) => {
+    storage.deleteBook(bookId);
+    const updatedBooks = storage.getBooks();
+    setBooks(updatedBooks);
+
+    const updatedShelves = storage.getShelves().map((shelf) => ({
+      ...shelf,
+      bookIds: shelf.bookIds.filter((id) => id !== bookId),
+    }));
+    storage.setShelves(updatedShelves);
+    setShelves(updatedShelves);
+    toast.success("Book deleted");
+  };
+
+  const handleDeleteShelf = (shelfId: string) => {
+    storage.deleteShelf(shelfId);
+    const updatedShelves = storage.getShelves();
+    setShelves(updatedShelves);
+    toast.success("Shelf deleted");
   };
 
   if (!user) return null;
@@ -337,7 +362,7 @@ export default function Profile() {
               <h2 className="font-serif text-3xl font-semibold">Currently Reading</h2>
               <span className="text-xs font-semibold text-primary">({currentlyReading.length})</span>
             </div>
-            <Button onClick={handleOpenAddBookDialog}>
+            <Button onClick={() => handleOpenAddBookDialog("reading")}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
             </Button>
@@ -349,6 +374,7 @@ export default function Profile() {
                 book={book} 
                 onClick={() => navigate(`/book/${book.id}`)}
                 onEdit={() => navigate(`/edit-book/${book.id}`)}
+                onDelete={() => handleDeleteBook(book.id)}
               />
             ))}
           </div>
@@ -361,7 +387,7 @@ export default function Profile() {
               <h2 className="font-serif text-3xl font-semibold">Already Read</h2>
               <span className="text-xs font-semibold text-primary">({alreadyRead.length})</span>
             </div>
-            <Button onClick={handleOpenAddBookDialog}>
+            <Button onClick={() => handleOpenAddBookDialog("read")}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
             </Button>
@@ -373,6 +399,7 @@ export default function Profile() {
                 book={book} 
                 onClick={() => navigate(`/book/${book.id}`)}
                 onEdit={() => navigate(`/edit-book/${book.id}`)}
+                onDelete={() => handleDeleteBook(book.id)}
               />
             ))}
           </div>
@@ -400,6 +427,7 @@ export default function Profile() {
                   books={shelfBooks}
                   onClick={() => navigate(`/shelf/${shelf.id}`)}
                   onEdit={() => navigate(`/edit-shelf/${shelf.id}`)}
+                  onDelete={() => handleDeleteShelf(shelf.id)}
                 />
               );
             })}
@@ -412,7 +440,7 @@ export default function Profile() {
               <h2 className="font-serif text-3xl font-semibold">Wishlist</h2>
               <span className="text-xs font-semibold text-primary">({wishlist.length})</span>
             </div>
-            <Button onClick={handleOpenAddBookDialog}>
+            <Button onClick={() => handleOpenAddBookDialog("wishlist")}>
               <Plus className="w-4 h-4 mr-2" />
               Add Book
             </Button>
@@ -423,6 +451,14 @@ export default function Profile() {
                 key={book.id} 
                 book={book} 
                 onClick={() => navigate(`/book/${book.id}`)}
+                onEdit={() => navigate(`/edit-book/${book.id}`)}
+                onDelete={() => handleDeleteBook(book.id)}
+                footerNote={book.coverPreference === 'specific'
+                  ? 'This specific cover'
+                  : book.coverPreference === 'none'
+                  ? 'No cover preference'
+                  : undefined}
+                footerNoteClassName="text-[11px] text-primary"
               />
             ))}
           </div>
@@ -441,17 +477,42 @@ export default function Profile() {
                   variant={activeActivityTab === tab.value ? "default" : "ghost"}
                   size="sm"
                   className={activeActivityTab === tab.value ? "shadow" : "text-muted-foreground"}
-                  onClick={() => setActiveActivityTab(tab.value)}
+                  onClick={() => {
+                    setActiveActivityTab(tab.value);
+                    if (tab.value !== 'logs') {
+                      setLogView('monthly');
+                    }
+                  }}
                 >
                   {tab.label}
                 </Button>
               ))}
             </div>
           </div>
-          <Card className="p-6">
-            <p className="text-muted-foreground">
-              {activityMessages[activeActivityTab]}
-            </p>
+          <Card className="p-6 space-y-2 relative">
+            {activeActivityTab === 'logs' ? (
+              <>
+                <div className="absolute right-4 top-4">
+                  <select
+                    value={logView}
+                    onChange={(e) => setLogView(e.target.value as LogView)}
+                    className="rounded-md border bg-background px-3 py-1 text-sm"
+                  >
+                    <option value="monthly">Monthly Log</option>
+                    <option value="daily">Daily Log</option>
+                  </select>
+                </div>
+                <p className="text-muted-foreground pt-8">
+                  {logView === 'monthly'
+                    ? "No monthly logs yet. Start tracking your reading progress!"
+                    : "No daily logs yet. Capture your day-to-day reading moments!"}
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">
+                {activityMessages[activeActivityTab]}
+              </p>
+            )}
           </Card>
         </section>
       </div>

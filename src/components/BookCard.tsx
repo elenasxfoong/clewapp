@@ -1,33 +1,63 @@
 import { Book } from "@/lib/storage";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Star } from "lucide-react";
 
 interface BookCardProps {
   book: Book;
   onClick?: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
   footerNote?: string;
   footerNoteClassName?: string;
 }
 
-export const BookCard = ({ book, onClick, onEdit, footerNote, footerNoteClassName }: BookCardProps) => {
+export const BookCard = ({ book, onClick, onEdit, onDelete, footerNote, footerNoteClassName }: BookCardProps) => {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   return (
     <Card 
       className="group overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 bg-card border-border"
       onClick={onClick}
     >
       <div className="aspect-[2/3] relative overflow-hidden bg-muted">
-        {onEdit && (
-          <button
-            type="button"
-            className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
-            onClick={(event) => {
-              event.stopPropagation();
-              onEdit();
-            }}
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
+        {(onEdit || onDelete) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-28">
+              {onEdit && (
+                <DropdownMenuItem
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEdit();
+                  }}
+                >
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {onDelete && (
+                <DropdownMenuItem
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowDeleteConfirm(true);
+                  }}
+                >
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         {book.coverImage ? (
           <img 
@@ -62,6 +92,30 @@ export const BookCard = ({ book, onClick, onEdit, footerNote, footerNoteClassNam
           </p>
         )}
       </div>
+      {onDelete && (
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent onClick={(event) => event.stopPropagation()}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this entry?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action is irreversible. Are you sure you want to delete this book?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowDeleteConfirm(false);
+                  onDelete();
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Card>
   );
 };

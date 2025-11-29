@@ -9,6 +9,7 @@ export interface Book {
   review?: string;
   status: 'reading' | 'read' | 'wishlist';
   userId: string;
+  coverPreference?: 'specific' | 'none';
 }
 
 export interface Draft {
