@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { generalBookDatabase } from "@/lib/generalBooks";
+import { fetchGoogleBookById, type GoogleBookResult } from "@/services/googleBooks";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -38,6 +38,9 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<Book["status"]>("reading");
   const [coverPreference, setCoverPreference] = useState<"specific" | "none">("specific");
+  const [googleBook, setGoogleBook] = useState<GoogleBookResult | null>(null);
+  const [isLoadingGoogleBook, setIsLoadingGoogleBook] = useState(false);
+  const [googleBookError, setGoogleBookError] = useState<string | null>(null);
 
   const savedBook = useMemo(() => {
     if (!bookId) return null;
@@ -51,16 +54,57 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
     return drafts.find((entry) => entry.id === bookId) ?? null;
   }, [bookId]);
 
-  const libraryBook = useMemo(
-    () => generalBookDatabase.find((entry) => entry.id === bookId),
-    [bookId]
-  );
   const isEditing = mode === "edit";
   const isDraftMode = mode === "draft";
-  const book = isEditing ? savedBook : isDraftMode ? draftEntry : libraryBook;
+  const book = isEditing ? savedBook : isDraftMode ? draftEntry : googleBook;
   const statusParam = (searchParams.get("status") as Book["status"] | null);
 
   const displayedRating = hoveredRating ?? rating;
+
+  useEffect(() => {
+    if (isEditing || isDraftMode) {
+      return;
+    }
+
+    if (!bookId) {
+      setGoogleBook(null);
+      setGoogleBookError("Invalid book selection.");
+      return;
+    }
+
+    let isActive = true;
+    const controller = new AbortController();
+    setIsLoadingGoogleBook(true);
+    setGoogleBookError(null);
+    setGoogleBook(null);
+
+    fetchGoogleBookById(bookId, controller.signal)
+      .then((result) => {
+        if (!isActive) return;
+        setGoogleBook(result);
+      })
+      .catch((error) => {
+        const errorName = error instanceof Error ? error.name : undefined;
+        if (errorName === "AbortError") {
+          return;
+        }
+        console.error("Failed to fetch Google Books volume", error);
+        if (isActive) {
+          setGoogleBook(null);
+          setGoogleBookError("Unable to load this book from Google Books.");
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingGoogleBook(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [bookId, isEditing, isDraftMode]);
 
   useEffect(() => {
     if (isEditing && savedBook) {
@@ -265,26 +309,28 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
     }
   };
 
-  if (!book) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
-        <Card className="max-w-md w-full p-6 text-center space-y-4">
-          <p className="font-serif text-2xl">Entry not found</p>
-          <p className="text-muted-foreground">
-            The selection you chose is no longer available.
-          </p>
-          <Button onClick={() => navigate(-1)}>Go Back</Button>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-10">
         <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
           Back
         </Button>
+        {!isEditing && !isDraftMode && (
+          <div className="mb-6 space-y-2">
+            {isLoadingGoogleBook && (
+              <p className="text-sm text-muted-foreground">
+                Loading book details from Google Books...
+              </p>
+            )}
+            {googleBookError && (
+              <Card className="border-destructive/30 bg-destructive/5 p-4">
+                <p className="text-sm text-destructive">
+                  {googleBookError}
+                </p>
+              </Card>
+            )}
+          </div>
+        )}
         <div className="grid gap-8 lg:grid-cols-[300px,1fr]">
           <div>
             <div
@@ -294,7 +340,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
               {imagePreview ? (
                 <img
                   src={imagePreview}
-                  alt={book.title}
+                  alt={book?.title ?? "Book cover"}
                   className="h-full w-full object-cover rounded-lg"
                 />
               ) : (
@@ -311,8 +357,8 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
           </div>
           <div className="space-y-6">
             <div>
-              <h1 className="font-serif text-4xl font-bold">{book.title}</h1>
-              <p className="text-lg text-muted-foreground">{book.author}</p>
+              <h1 className="font-serif text-4xl font-bold">{book?.title ?? "Loading book..."}</h1>
+              <p className="text-lg text-muted-foreground">{book?.author ?? "Fetching details..."}</p>
             </div>
             {currentStatus === "wishlist" && (
               <div className="space-y-4">

@@ -1,9 +1,9 @@
 //profile/Me page
 
-import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { storage, User, Book, Shelf } from "@/lib/storage";
-import { generalBookDatabase } from "@/lib/generalBooks";
+import { searchGoogleBooks, type GoogleBookResult } from "@/services/googleBooks";
 import { BookCard } from "@/components/BookCard";
 import { ShelfCard } from "@/components/ShelfCard";
 import { Button } from "@/components/ui/button";
@@ -28,9 +28,17 @@ export default function Profile() {
   const [editedQuote, setEditedQuote] = useState("");
   const [editedBio, setEditedBio] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [globalSearchResults, setGlobalSearchResults] = useState<GoogleBookResult[]>([]);
+  const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
+  const [globalSearchError, setGlobalSearchError] = useState<string | null>(null);
+  const globalSearchAbortController = useRef<AbortController | null>(null);
   const [activeActivityTab, setActiveActivityTab] = useState<ActivityTab>('logs');
   const [isAddBookDialogOpen, setIsAddBookDialogOpen] = useState(false);
   const [bookSearchQuery, setBookSearchQuery] = useState("");
+  const [bookSearchResults, setBookSearchResults] = useState<GoogleBookResult[]>([]);
+  const [isSearchingBooks, setIsSearchingBooks] = useState(false);
+  const [bookSearchError, setBookSearchError] = useState<string | null>(null);
+  const bookSearchAbortController = useRef<AbortController | null>(null);
   const [addBookStatus, setAddBookStatus] = useState<Book["status"]>("reading");
   const [logView, setLogView] = useState<LogView>("monthly");
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -101,31 +109,96 @@ export default function Profile() {
     comments: "Comments you've made will show up here.",
   };
 
-  const filteredGeneralBooks = useMemo(() => {
-    const normalizedQuery = bookSearchQuery.trim().toLowerCase();
-    return generalBookDatabase
-      .map((book, index) => {
-        const title = book.title.toLowerCase();
-        const author = book.author.toLowerCase();
-        let score = 0;
-        if (normalizedQuery) {
-          if (title.startsWith(normalizedQuery)) score += 3;
-          else if (title.includes(normalizedQuery)) score += 2;
-          if (author.startsWith(normalizedQuery)) score += 2;
-          else if (author.includes(normalizedQuery)) score += 1;
-        }
-        return { book, score, index };
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setGlobalSearchError(null);
+      setGlobalSearchResults([]);
+      setIsSearchingGlobal(false);
+      globalSearchAbortController.current?.abort();
+      globalSearchAbortController.current = null;
+      return;
+    }
+
+    const controller = new AbortController();
+    globalSearchAbortController.current?.abort();
+    globalSearchAbortController.current = controller;
+    setIsSearchingGlobal(true);
+    setGlobalSearchError(null);
+
+    searchGoogleBooks(query, { maxResults: 5, signal: controller.signal })
+      .then((results) => {
+        setGlobalSearchResults(results);
       })
-      .filter(item => (normalizedQuery ? item.score > 0 : true))
-      .sort((a, b) => {
-        if (normalizedQuery && a.score !== b.score) {
-          return b.score - a.score;
+      .catch((error) => {
+        const errorName = error instanceof Error ? error.name : undefined;
+        if (errorName === "AbortError") {
+          return;
         }
-        return a.index - b.index;
+        console.error("Failed to search Google Books from header", error);
+        setGlobalSearchError("We couldn't reach Google Books. Please try again.");
+        setGlobalSearchResults([]);
       })
-      .slice(0, 5)
-      .map(item => item.book);
-  }, [bookSearchQuery]);
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsSearchingGlobal(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!isAddBookDialogOpen) {
+      setBookSearchError(null);
+      setBookSearchResults([]);
+      setIsSearchingBooks(false);
+      bookSearchAbortController.current?.abort();
+      bookSearchAbortController.current = null;
+      return;
+    }
+
+    const query = bookSearchQuery.trim();
+    if (!query) {
+      setBookSearchError(null);
+      setBookSearchResults([]);
+      setIsSearchingBooks(false);
+      bookSearchAbortController.current?.abort();
+      bookSearchAbortController.current = null;
+      return;
+    }
+
+    const controller = new AbortController();
+    bookSearchAbortController.current?.abort();
+    bookSearchAbortController.current = controller;
+    setIsSearchingBooks(true);
+    setBookSearchError(null);
+
+    searchGoogleBooks(query, { maxResults: 5, signal: controller.signal })
+      .then((results) => {
+        setBookSearchResults(results);
+      })
+      .catch((error) => {
+        const errorName = error instanceof Error ? error.name : undefined;
+        if (errorName === "AbortError") {
+          return;
+        }
+        console.error("Failed to search Google Books", error);
+        setBookSearchError("We couldn't reach Google Books. Please try again.");
+        setBookSearchResults([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsSearchingBooks(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [bookSearchQuery, isAddBookDialogOpen]);
 
   const handleOpenAddBookDialog = (status: Book["status"]) => {
     setAddBookStatus(status);
@@ -154,6 +227,49 @@ export default function Profile() {
     setIsAddBookDialogOpen(false);
     setBookSearchQuery("");
     navigate(`/add-book/${bookId}?status=${addBookStatus}`);
+  };
+
+  const handleGlobalSearchSelect = (bookId: string) => {
+    setSearchQuery("");
+    setGlobalSearchResults([]);
+    setGlobalSearchError(null);
+    setIsSearchingGlobal(false);
+    globalSearchAbortController.current?.abort();
+    globalSearchAbortController.current = null;
+    navigate(`/add-book/${bookId}`);
+  };
+
+  const renderGlobalSearchDropdown = () => {
+    if (!searchQuery.trim()) {
+      return null;
+    }
+
+    return (
+      <div className="absolute left-0 right-0 top-full z-40 mt-2 rounded-xl border bg-card shadow-xl">
+        <div className="max-h-64 overflow-y-auto p-3 space-y-2">
+          {globalSearchError && (
+            <p className="text-sm text-destructive text-center">{globalSearchError}</p>
+          )}
+          {!globalSearchError && isSearchingGlobal && (
+            <p className="text-sm text-muted-foreground text-center">Searching Google Books...</p>
+          )}
+          {!globalSearchError && !isSearchingGlobal && globalSearchResults.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center">No books match your search yet.</p>
+          )}
+          {!globalSearchError && !isSearchingGlobal && globalSearchResults.map((book) => (
+            <button
+              key={book.id}
+              type="button"
+              className="w-full text-left rounded-lg border px-3 py-2 transition hover:bg-muted"
+              onClick={() => handleGlobalSearchSelect(book.id)}
+            >
+              <p className="font-semibold">{book.title}</p>
+              <p className="text-sm text-muted-foreground">{book.author}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   const handleDeleteBook = (bookId: string) => {
@@ -196,9 +312,10 @@ export default function Profile() {
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
+                  placeholder="Search Google Books..."
                   className="rounded-full pl-10 pr-4"
                 />
+                {renderGlobalSearchDropdown()}
               </div>
             </div>
             <div className="flex items-center justify-center gap-2 lg:w-1/3">
@@ -244,9 +361,10 @@ export default function Profile() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search..."
+                placeholder="Search Google Books..."
                 className="rounded-full pl-10 pr-4"
               />
+              {renderGlobalSearchDropdown()}
             </div>
           </div>
         </div>
@@ -536,13 +654,28 @@ export default function Profile() {
               <Input
                 value={bookSearchQuery}
                 onChange={(e) => setBookSearchQuery(e.target.value)}
-                placeholder="Search the general catalog..."
+                placeholder="Search Google Books..."
                 className="pl-10"
                 autoFocus
               />
             </div>
             <div className="space-y-3">
-              {filteredGeneralBooks.map((book) => (
+              {bookSearchError && (
+                <p className="text-sm text-destructive text-center py-6">
+                  {bookSearchError}
+                </p>
+              )}
+              {!bookSearchError && !bookSearchQuery.trim() && (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  Search Google Books to add a new title.
+                </p>
+              )}
+              {!bookSearchError && bookSearchQuery.trim() && isSearchingBooks && (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  Searching Google Books...
+                </p>
+              )}
+              {!bookSearchError && bookSearchQuery.trim() && !isSearchingBooks && bookSearchResults.map((book) => (
                 <div
                   key={book.id}
                   className="cursor-pointer rounded-lg border p-3 transition hover:bg-muted"
@@ -552,7 +685,7 @@ export default function Profile() {
                   <p className="text-sm text-muted-foreground">{book.author}</p>
                 </div>
               ))}
-              {filteredGeneralBooks.length === 0 && (
+              {!bookSearchError && bookSearchQuery.trim() && !isSearchingBooks && bookSearchResults.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-6">
                   No books match your search yet.
                 </p>
