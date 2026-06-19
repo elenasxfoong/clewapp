@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 import { searchGoogleBooks } from "../src/services/googleBooks";

@@ -1,5 +1,24 @@
 const GOOGLE_BOOKS_API_BASE = "https://www.googleapis.com/books/v1/volumes";
 
+const getGoogleBooksApiKey = () => {
+  const runtime = globalThis as typeof globalThis & {
+    process?: {
+      env?: {
+        GOOGLE_BOOKS_API_KEY?: string;
+      };
+    };
+  };
+
+  return runtime.process?.env?.GOOGLE_BOOKS_API_KEY?.trim() || undefined;
+};
+
+const appendGoogleBooksApiKey = (url: URL) => {
+  const apiKey = getGoogleBooksApiKey();
+  if (apiKey) {
+    url.searchParams.set("key", apiKey);
+  }
+};
+
 export type GoogleBookResult = {
   id: string;
   title: string;
@@ -69,6 +88,7 @@ export const searchGoogleBooks = async (
   const url = new URL(GOOGLE_BOOKS_API_BASE);
   url.searchParams.set("q", normalizedQuery);
   url.searchParams.set("maxResults", String(maxResults));
+  appendGoogleBooksApiKey(url);
 
   const data = await runGoogleBooksRequest<GoogleBooksSearchResponse>(url.toString(), options?.signal);
   const items = data.items ?? [];
@@ -84,7 +104,9 @@ export const fetchGoogleBookById = async (id: string, signal?: AbortSignal): Pro
     return null;
   }
 
-  const url = `${GOOGLE_BOOKS_API_BASE}/${encodeURIComponent(normalizedId)}`;
-  const data = await runGoogleBooksRequest<GoogleBooksVolume>(url, signal);
+  const url = new URL(`${GOOGLE_BOOKS_API_BASE}/${encodeURIComponent(normalizedId)}`);
+  appendGoogleBooksApiKey(url);
+
+  const data = await runGoogleBooksRequest<GoogleBooksVolume>(url.toString(), signal);
   return normalizeVolume(data);
 };
