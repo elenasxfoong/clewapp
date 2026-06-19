@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { storage, User, Book, Shelf } from "@/lib/storage";
-import { searchGoogleBooks, type GoogleBookResult } from "@/services/googleBooks";
+import { cacheGoogleBook, searchGoogleBooks, type GoogleBookResult } from "@/services/googleBooks";
 import { BookCard } from "@/components/BookCard";
 import { ShelfCard } from "@/components/ShelfCard";
 import { Button } from "@/components/ui/button";
@@ -223,20 +223,54 @@ export default function Profile() {
     profileImageInputRef.current?.click();
   };
 
-  const handleSelectBook = (bookId: string) => {
-    setIsAddBookDialogOpen(false);
-    setBookSearchQuery("");
-    navigate(`/add-book/${bookId}?status=${addBookStatus}`);
+  const handleSelectBook = async (googleBooksId: string) => {
+    try {
+      if (import.meta.env.DEV) {
+        console.log("[Add Book] selected search result ID:", googleBooksId);
+      }
+
+      const savedBook = await cacheGoogleBook(googleBooksId);
+      const navigationUrl = `/add-book/${savedBook.googleBooksId}?status=${addBookStatus}`;
+
+      if (import.meta.env.DEV) {
+        console.log("[Add Book] cached Book.id returned by /api/books/cache:", savedBook.id);
+        console.log("[Add Book] navigation URL:", navigationUrl);
+      }
+
+      setIsAddBookDialogOpen(false);
+      setBookSearchQuery("");
+      navigate(navigationUrl);
+    } catch (error) {
+      console.error("Failed to cache selected book", error instanceof Error ? error.stack ?? error.message : error);
+      toast.error("Unable to save this book. Please try again.");
+    }
   };
 
-  const handleGlobalSearchSelect = (bookId: string) => {
-    setSearchQuery("");
-    setGlobalSearchResults([]);
-    setGlobalSearchError(null);
-    setIsSearchingGlobal(false);
-    globalSearchAbortController.current?.abort();
-    globalSearchAbortController.current = null;
-    navigate(`/add-book/${bookId}`);
+  const handleGlobalSearchSelect = async (googleBooksId: string) => {
+    try {
+      if (import.meta.env.DEV) {
+        console.log("[Global Search] selected search result ID:", googleBooksId);
+      }
+
+      const savedBook = await cacheGoogleBook(googleBooksId);
+      const navigationUrl = `/add-book/${savedBook.googleBooksId}`;
+
+      if (import.meta.env.DEV) {
+        console.log("[Global Search] cached Book.id returned by /api/books/cache:", savedBook.id);
+        console.log("[Global Search] navigation URL:", navigationUrl);
+      }
+
+      setSearchQuery("");
+      setGlobalSearchResults([]);
+      setGlobalSearchError(null);
+      setIsSearchingGlobal(false);
+      globalSearchAbortController.current?.abort();
+      globalSearchAbortController.current = null;
+      navigate(navigationUrl);
+    } catch (error) {
+      console.error("Failed to cache selected book from header", error instanceof Error ? error.stack ?? error.message : error);
+      toast.error("Unable to save this book. Please try again.");
+    }
   };
 
   const renderGlobalSearchDropdown = () => {

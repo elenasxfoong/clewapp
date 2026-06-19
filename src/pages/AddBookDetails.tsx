@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { fetchGoogleBookById, type GoogleBookResult } from "@/services/googleBooks";
+import { cacheGoogleBook, publishReview, type CachedBook, type GoogleBookResult } from "@/services/googleBooks";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Star } from "lucide-react";
 import { storage, type Book, type Draft } from "@/lib/storage";
+import { toast } from "sonner";
 
 const STAR_COUNT = 5;
 const REVIEW_MAX_LENGTH = 100_000;
@@ -39,8 +40,11 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
   const [currentStatus, setCurrentStatus] = useState<Book["status"]>("reading");
   const [coverPreference, setCoverPreference] = useState<"specific" | "none">("specific");
   const [googleBook, setGoogleBook] = useState<GoogleBookResult | null>(null);
+  const [cachedBook, setCachedBook] = useState<CachedBook | null>(null);
   const [isLoadingGoogleBook, setIsLoadingGoogleBook] = useState(false);
   const [googleBookError, setGoogleBookError] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
 
   const savedBook = useMemo(() => {
     if (!bookId) return null;
@@ -68,6 +72,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
 
     if (!bookId) {
       setGoogleBook(null);
+      setCachedBook(null);
       setGoogleBookError("Invalid book selection.");
       return;
     }
@@ -77,20 +82,37 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
     setIsLoadingGoogleBook(true);
     setGoogleBookError(null);
     setGoogleBook(null);
+    setCachedBook(null);
 
-    fetchGoogleBookById(bookId, controller.signal)
+    if (import.meta.env.DEV) {
+      console.log("[Add Book Details] route Google Books ID:", bookId);
+      console.log("[Add Book Details] loading book through /api/books/cache");
+    }
+
+    cacheGoogleBook(bookId, controller.signal)
       .then((result) => {
         if (!isActive) return;
-        setGoogleBook(result);
+        setCachedBook(result);
+        setGoogleBook({
+          id: result.googleBooksId,
+          title: result.title,
+          author: result.author,
+          description: result.description ?? undefined,
+        });
+        if (import.meta.env.DEV) {
+          console.log("[Add Book Details] cached Book.id stored on review page:", result.id);
+          console.log("[Add Book Details] cached Book.googleBooksId:", result.googleBooksId);
+        }
       })
       .catch((error) => {
         const errorName = error instanceof Error ? error.name : undefined;
         if (errorName === "AbortError") {
           return;
         }
-        console.error("Failed to fetch Google Books volume", error);
+        console.error("Failed to load cached Google Books volume", error instanceof Error ? error.stack ?? error.message : error);
         if (isActive) {
           setGoogleBook(null);
+          setCachedBook(null);
           setGoogleBookError("Unable to load this book from Google Books.");
         }
       })
@@ -203,9 +225,11 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
     return 0;
   };
   
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!book || isPublishing) return;
     setIsPublishing(true);
+    setPublishError(null);
+    setPublishSuccess(null);
     
     try {
       const trimmedDate = dateRead.trim();
@@ -222,6 +246,46 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
       const resolvedRating = currentStatus === "wishlist" ? undefined : rating > 0 ? rating : undefined;
       const resolvedReview = currentStatus === "wishlist" ? undefined : review || undefined;
       const resolvedDate = status === "read" ? trimmedDate : undefined;
+      const resolvedReviewBody = resolvedReview?.trim();
+      const postgresBookId = isEditing && savedBook
+        ? savedBook.id
+        : cachedBook?.id;
+
+      if (!isDraftMode && currentStatus !== "wishlist") {
+        if (!resolvedReviewBody) {
+          setPublishError("Add a review before publishing.");
+          return;
+        }
+
+        if (!postgresBookId) {
+          setPublishError("Book is still loading. Please try again.");
+          return;
+        }
+
+        if (import.meta.env.DEV) {
+          console.log("[Add Book Details] bookId used on review page:", postgresBookId);
+        }
+
+        await publishReview({
+          bookId: postgresBookId,
+          body: resolvedReviewBody,
+          rating: resolvedRating,
+          dateRead: resolvedDate,
+          currentlyReading: isCurrentlyReading,
+          coverImage: resolvedCoverImage || undefined,
+          status,
+          coverPreference: undefined,
+          book: {
+            title: book.title,
+            author: book.author,
+            description: "description" in book ? book.description : undefined,
+            googleBooksId: cachedBook?.googleBooksId,
+          },
+        });
+
+        setPublishSuccess("Review published.");
+        toast.success("Review published");
+      }
 
       if (isEditing && savedBook) {
         storage.updateBook(savedBook.id, {
@@ -250,7 +314,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
         storage.deleteDraft(draftEntry.id);
       } else {
         const newBook: Book = {
-          id: generateBookId(),
+          id: cachedBook?.id ?? generateBookId(),
           title: book.title,
           author: book.author,
           coverImage: resolvedCoverImage,
@@ -265,6 +329,10 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
         storage.addBook(newBook);
       }
       navigate("/profile");
+    } catch (error) {
+      console.error("Failed to publish review", error instanceof Error ? error.stack ?? error.message : error);
+      setPublishError("Unable to publish this review. Please try again.");
+      toast.error("Unable to publish this review");
     } finally {
       setIsPublishing(false);
     }
@@ -330,6 +398,13 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
               </Card>
             )}
           </div>
+        )}
+        {(publishError || publishSuccess) && (
+          <Card className={`mb-6 p-4 ${publishError ? "border-destructive/30 bg-destructive/5" : "border-primary/30 bg-primary/5"}`}>
+            <p className={`text-sm ${publishError ? "text-destructive" : "text-primary"}`}>
+              {publishError ?? publishSuccess}
+            </p>
+          </Card>
         )}
         <div className="grid gap-8 lg:grid-cols-[300px,1fr]">
           <div>
