@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { cacheGoogleBook, publishReview, type CachedBook, type GoogleBookResult } from "@/services/googleBooks";
+import { cacheGoogleBook, fetchBookReview, publishReview, type CachedBook, type ExistingReview, type GoogleBookResult } from "@/services/googleBooks";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -45,6 +45,8 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
   const [googleBookError, setGoogleBookError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
+  const [existingReview, setExistingReview] = useState<ExistingReview>(null);
+  const [isLoadingReview, setIsLoadingReview] = useState(false);
 
   const savedBook = useMemo(() => {
     if (!bookId) return null;
@@ -61,6 +63,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
   const isEditing = mode === "edit";
   const isDraftMode = mode === "draft";
   const book = isEditing ? savedBook : isDraftMode ? draftEntry : googleBook;
+  const postgresBookId = isEditing && savedBook ? savedBook.id : cachedBook?.id;
   const statusParam = (searchParams.get("status") as Book["status"] | null);
 
   const displayedRating = hoveredRating ?? rating;
@@ -127,6 +130,59 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
       controller.abort();
     };
   }, [bookId, isEditing, isDraftMode]);
+
+  useEffect(() => {
+    if (isDraftMode || !postgresBookId) {
+      setExistingReview(null);
+      setIsLoadingReview(false);
+      return;
+    }
+
+    let isActive = true;
+    const controller = new AbortController();
+    setIsLoadingReview(true);
+
+    fetchBookReview(postgresBookId, controller.signal)
+      .then((result) => {
+        if (!isActive) return;
+
+        setExistingReview(result);
+        if (!result) {
+          return;
+        }
+
+        setRating(result.rating ?? 0);
+        setReview(result.body ?? "");
+        setDateRead(result.dateRead ?? "");
+        setIsCurrentlyReading(result.currentlyReading);
+        if (result.status === "reading" || result.status === "read" || result.status === "wishlist") {
+          setCurrentStatus(result.status);
+        }
+        setImagePreview(result.coverImage ?? null);
+        setImageData(result.coverImage ?? null);
+        if (result.coverPreference === "specific" || result.coverPreference === "none") {
+          setCoverPreference(result.coverPreference);
+        }
+      })
+      .catch((error) => {
+        const errorName = error instanceof Error ? error.name : undefined;
+        if (errorName === "AbortError") {
+          return;
+        }
+
+        console.error("Failed to fetch existing review", error instanceof Error ? error.stack ?? error.message : error);
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingReview(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [isDraftMode, postgresBookId]);
 
   useEffect(() => {
     if (isEditing && savedBook) {
@@ -244,19 +300,11 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
         : "reading";
       const resolvedCoverImage = getCoverImageValue();
       const resolvedRating = currentStatus === "wishlist" ? undefined : rating > 0 ? rating : undefined;
-      const resolvedReview = currentStatus === "wishlist" ? undefined : review || undefined;
+      const resolvedReview = currentStatus === "wishlist" ? undefined : review;
       const resolvedDate = status === "read" ? trimmedDate : undefined;
       const resolvedReviewBody = resolvedReview?.trim();
-      const postgresBookId = isEditing && savedBook
-        ? savedBook.id
-        : cachedBook?.id;
 
       if (!isDraftMode && currentStatus !== "wishlist") {
-        if (!resolvedReviewBody) {
-          setPublishError("Add a review before publishing.");
-          return;
-        }
-
         if (!postgresBookId) {
           setPublishError("Book is still loading. Please try again.");
           return;
@@ -266,9 +314,9 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
           console.log("[Add Book Details] bookId used on review page:", postgresBookId);
         }
 
-        await publishReview({
+        const updatedReview = await publishReview({
           bookId: postgresBookId,
-          body: resolvedReviewBody,
+          body: resolvedReviewBody ?? "",
           rating: resolvedRating,
           dateRead: resolvedDate,
           currentlyReading: isCurrentlyReading,
@@ -283,8 +331,10 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
           },
         });
 
-        setPublishSuccess("Review published.");
-        toast.success("Review published");
+        setExistingReview(updatedReview);
+        const successMessage = updatedReview ? existingReview ? "Review updated." : "Review published." : "Review removed.";
+        setPublishSuccess(successMessage);
+        toast.success(successMessage);
       }
 
       if (isEditing && savedBook) {
@@ -292,7 +342,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
           coverImage: resolvedCoverImage || savedBook.coverImage || "",
           rating: resolvedRating,
           dateRead: resolvedDate,
-          review: resolvedReview,
+          review: resolvedReviewBody || undefined,
           status,
           userId: savedBook.userId,
           coverPreference: currentStatus === "wishlist" ? coverPreference : undefined,
@@ -305,7 +355,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
           coverImage: resolvedCoverImage || draftEntry.coverImage || "",
           rating: resolvedRating,
           dateRead: resolvedDate,
-          review: resolvedReview,
+          review: resolvedReviewBody || undefined,
           status,
           userId: draftEntry.userId,
           coverPreference: currentStatus === "wishlist" ? coverPreference : undefined,
@@ -320,7 +370,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
           coverImage: resolvedCoverImage,
           rating: resolvedRating,
           dateRead: resolvedDate,
-          review: resolvedReview,
+          review: resolvedReviewBody || undefined,
           status,
           userId: currentUser?.id ?? "1",
           coverPreference: currentStatus === "wishlist" ? coverPreference : undefined,
@@ -398,6 +448,9 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
               </Card>
             )}
           </div>
+        )}
+        {isLoadingReview && (
+          <p className="mb-6 text-sm text-muted-foreground">Loading saved review...</p>
         )}
         {(publishError || publishSuccess) && (
           <Card className={`mb-6 p-4 ${publishError ? "border-destructive/30 bg-destructive/5" : "border-primary/30 bg-primary/5"}`}>
@@ -542,7 +595,7 @@ const AddBookDetails = ({ mode = "create" }: AddBookDetailsProps) => {
                     </Button>
                   )}
                   <Button onClick={handlePublish} disabled={isPublishing}>
-                    {isPublishing ? "Publishing..." : "Publish"}
+                    {isPublishing ? "Publishing..." : existingReview ? "Update Review" : "Publish"}
                   </Button>
                 </div>
               </>

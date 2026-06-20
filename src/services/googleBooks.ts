@@ -118,6 +118,22 @@ export type PublishReviewInput = {
   };
 };
 
+export type ExistingReview = PublishedReview | null;
+
+export type BookReviewListItem = {
+  id: string;
+  reviewerUsername: string;
+  rating?: number | null;
+  body: string;
+  createdAt: string;
+};
+
+export type BookReviewSummary = {
+  averageRating: number | null;
+  reviewCount: number;
+  reviews: BookReviewListItem[];
+};
+
 type GoogleBooksVolume = {
   id: string;
   volumeInfo?: {
@@ -290,4 +306,28 @@ export const publishReview = async (input: PublishReviewInput, signal?: AbortSig
   logDev("[Reviews] created/updated Review row:", review);
 
   return review;
+};
+
+export const fetchBookReview = async (bookId: string, signal?: AbortSignal): Promise<ExistingReview> => {
+  const url = new URL(`/api/books/${encodeURIComponent(bookId)}/review`, window.location.origin);
+
+  const response = await fetch(`${url.pathname}${url.search}`, { signal });
+
+  if (!response.ok) {
+    throw new Error(`Review fetch request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<ExistingReview>;
+};
+
+export const fetchBookReviewSummary = async (bookId: string, signal?: AbortSignal): Promise<BookReviewSummary> => {
+  const url = new URL(`/api/books/${encodeURIComponent(bookId)}/reviews`, window.location.origin);
+
+  const response = await fetch(`${url.pathname}${url.search}`, { signal });
+
+  if (!response.ok) {
+    throw new Error(`Review summary request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<BookReviewSummary>;
 };

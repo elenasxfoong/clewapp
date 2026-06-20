@@ -137,6 +137,75 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  const bookReviewMatch = url.pathname.match(/^\/api\/books\/([^/]+)\/review$/);
+  if (request.method === "GET" && bookReviewMatch) {
+    try {
+      const bookId = decodeURIComponent(bookReviewMatch[1]);
+      const user = await getReviewUser();
+      const review = await prisma.review.findUnique({
+        where: {
+          userId_bookId: {
+            userId: user.id,
+            bookId,
+          },
+        },
+      });
+
+      logDev("[Reviews] fetched existing review:", review);
+      sendJson(response, 200, review);
+    } catch (error) {
+      logError("Review fetch failed", error);
+      sendJson(response, 500, { error: "Failed to fetch review" });
+    }
+
+    return;
+  }
+
+  const bookReviewsMatch = url.pathname.match(/^\/api\/books\/([^/]+)\/reviews$/);
+  if (request.method === "GET" && bookReviewsMatch) {
+    try {
+      const bookId = decodeURIComponent(bookReviewsMatch[1]);
+      const reviews = await prisma.review.findMany({
+        where: { bookId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          rating: true,
+          body: true,
+          createdAt: true,
+          user: {
+            select: {
+              username: true,
+            },
+          },
+        },
+      });
+      const ratings = reviews
+        .map((review) => review.rating)
+        .filter((rating): rating is number => typeof rating === "number");
+      const averageRating = ratings.length > 0
+        ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+        : null;
+
+      sendJson(response, 200, {
+        averageRating,
+        reviewCount: reviews.length,
+        reviews: reviews.map((review) => ({
+          id: review.id,
+          reviewerUsername: review.user.username,
+          rating: review.rating,
+          body: review.body,
+          createdAt: review.createdAt,
+        })),
+      });
+    } catch (error) {
+      logError("Review aggregate fetch failed", error);
+      sendJson(response, 500, { error: "Failed to fetch review summary" });
+    }
+
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/reviews") {
     try {
       const body = await readJsonBody<{
@@ -173,11 +242,6 @@ const server = createServer(async (request, response) => {
 
       if (!bookId) {
         sendJson(response, 400, { error: "bookId is required" });
-        return;
-      }
-
-      if (!reviewBody) {
-        sendJson(response, 400, { error: "body is required" });
         return;
       }
 
@@ -223,6 +287,18 @@ const server = createServer(async (request, response) => {
       const user = await getReviewUser();
       logDev("[Reviews] review user:", user);
       logDev("[Reviews] persisted UI fields:", { dateRead, currentlyReading, coverImage, status, coverPreference });
+
+      if (!reviewBody) {
+        const deletedReview = await prisma.review.deleteMany({
+          where: {
+            userId: user.id,
+            bookId: book.id,
+          },
+        });
+        logDev("[Reviews] deleted review count:", deletedReview.count);
+        sendJson(response, 200, null);
+        return;
+      }
 
       const review = await prisma.review.upsert({
         where: {

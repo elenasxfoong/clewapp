@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import Drafts from "./pages/Drafts";
 import AddShelf from "./pages/AddShelf";
 import AddBookDetails from "./pages/AddBookDetails";
+import BookDetails from "./pages/BookDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/drafts/:bookId/edit" element={<AddBookDetails mode="draft" />} />
           <Route path="/create-shelf" element={<AddShelf />} />
           <Route path="/edit-shelf/:shelfId" element={<AddShelf mode="edit" />} />
+          <Route path="/book/:bookId" element={<BookDetails />} />
           <Route path="/add-book/:bookId" element={<AddBookDetails />} />
           <Route path="/edit-book/:bookId" element={<AddBookDetails mode="edit" />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
